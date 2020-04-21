@@ -1,4 +1,3 @@
-
 class Box {
   /**
   A box refers to something that is to be typeset: either a character from some font
@@ -98,7 +97,9 @@ class Paragraph {
     this.body = [];
   }
 
-  build(text: string) {
+  build(text: any) {
+    if (!(text instanceof String))
+      throw ("Only text is allowed as an argument!");
     /*
     A typesetting system like TEX will put such an actual paragraph into the abstract form
     we want in the following way:
@@ -165,6 +166,8 @@ class NetworkNode {
   // pointer to the next node in the list
   link: NetworkNode;
   active: boolean;
+  /** total stretch ratio */
+  ratio: number;
 
   constructor(
     position: number,
@@ -286,6 +289,8 @@ class Break {
     // BEGIN: use the chosen node to determine the optimal breakpoint sequence
     let breakpoints: Array<number> = Array(linenumber + 1);
     for (let j = linenumber; j >= 0; j--) {
+      // DEBUG 
+      console.log(chosen.ratio);
       breakpoints[j] = chosen.position;
       chosen = chosen.previous;
     }
@@ -437,6 +442,7 @@ class Break {
     } else {
       r = 0;
     }
+    a.ratio = r;
     return [L, j, r];
   }
 
@@ -576,20 +582,123 @@ function insertBreaks(breakpoints: Array<number>, par: Paragraph): string {
   return result;
 }
 
+/**
+ * provide functionality for the web
+ */
+class WebPar extends Paragraph {
+
+  ruler: Element;
+  /**
+   * watch for changes to the ruler innerHTML
+   */
+  mutationObserver: MutationObserver;
+
+
+  constructor() {
+    super();
+    /**
+     * Before building the paragraph, we need the width of each word in pixels.
+     * But that is not easily computed from <p>. So, first we re-insert all words
+     * of the paragraph back into the paragraph as a sequence of <span>. Then, once
+     * the spans are rendered, step through each word to get the width.
+     */
+    // this.mutationObserver = new MutationObserver(mut => {
+    //   console.log("change to ruler innerHTML");
+    // })
+  }
+
+  /**
+   * 
+   * @param text - The raw paragraph text to break
+   */
+  build(target: HTMLElement) {
+    // this.buildRuler(target);
+
+    let text = target.innerText;
+    // split by whitespace
+    let processed = text.replace(/\s+/g, ' ').replace(/(^\s+)|(\s+$)/g, '').split(' ')
+    let word_list = document.createDocumentFragment();
+    for (let i = 0; i < processed.length; i++) {
+      let word = document.createElement('span');
+      word.setAttribute('class', 'break box');
+      word.innerText = processed[i];
+      word_list.appendChild(word);
+      // inter-word glue
+      if (i < processed.length - 1) {
+        let glue = document.createElement('span');
+        glue.setAttribute('class', 'break glue');
+        glue.setAttribute('style', 'width: 5px;');
+        word_list.appendChild(glue);
+      }
+    }
+    // create new paragraph
+    let new_par = document.createElement('p');
+    new_par.appendChild(word_list);
+
+    // replace old paragraph
+    target.parentElement.replaceChild(new_par, target);
+
+
+    // for (let i = 0; i < processed.length; i++) {
+    //   // get box width
+    //   this.body.push(new Box(this.measure(processed[i]), processed[i]));
+    //   if (i < processed.length - 1)
+    //     this.body.push(new Glue(this.measure(' '), 1, 1));
+    // }
+    // this.body.push(new Glue(0, Infinity, 0));
+    // this.body.push(new Penalty(0, -Infinity, 0));
+  }
+
+  clear() {
+    this.body = [];
+  }
+
+  /**
+   * Given some text, apply the computed styles
+   * and measure it's width in px
+   * 
+   * @param text - text to measure
+   */
+  measure(text: string): number {
+    this.ruler.innerHTML = text;
+    return this.ruler.getBoundingClientRect().width;
+  }
+
+  buildRuler(target: Element) {
+    // add the ruler
+    this.ruler = document.createElement('div');
+    this.ruler.classList.add('ruler');
+    // get applied styles to par
+    let applied_styles = window.getComputedStyle(target);
+    this.ruler.setAttribute('style', `font-size: ${applied_styles.getPropertyValue('font-size')}; visibility: hidden; position: absolute; top: -8000px; width: auto; display: inline; left: -8000px;`);
+    this.mutationObserver.observe(this.ruler, { innerHTML: true } as MutationObserverInit)
+  }
+
+}
+
 window.addEventListener('DOMContentLoaded', (event) => {
   console.log("Starting");
   // get all paragraphs
   let paragraphs = document.getElementsByTagName('p');
   let breaker = new Break();
   for (let i = 0; i < paragraphs.length; i++) {
-    // get text
-    let text = paragraphs[i].innerHTML;
+    // get width
+    let rect = paragraphs[i].getBoundingClientRect();
+    let width = rect.width; // in px
+    console.log(width + "px");
+
     // build par
-    let par = new Paragraph();
-    par.build(text);
-    let breakpoints = breaker.break(par, [80]);
-    let newpartext = insertBreaks(breakpoints, par);
-    console.log(newpartext);
-    paragraphs[i].innerHTML = newpartext;
+    let par = new WebPar();
+
+    // no par.build() takes care of breaking as well,
+    // because we don't know when the word widths will
+    // be available
+    par.build(paragraphs[i]);
+
+    // for now, assume all lines are the same length
+    // let breakpoints = breaker.break(par, [width]);
+    // let newpartext = insertBreaks(breakpoints, par);
+    // console.log(newpartext);
+    // paragraphs[i].innerHTML = newpartext;
   }
 });

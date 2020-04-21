@@ -4,6 +4,7 @@
   "description": "line breaking",
   "main": "breaker.js",
   "dependencies": {
+    "@microsoft/tsdoc": "^0.12.19",
     "@types/node": "^13.13.0",
     "tsc": "^1.20150623.0",
     "typescript": "^3.8.3"
