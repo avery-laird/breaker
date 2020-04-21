@@ -692,7 +692,8 @@ window.addEventListener('DOMContentLoaded', (event) => {
       if (i < processed.length - 1) {
         let glue = document.createElement('span');
         glue.setAttribute('class', 'break glue');
-        glue.setAttribute('style', 'width: 5px;');
+        let space = document.createTextNode('\u202F');
+        glue.appendChild(space);
         word_list.appendChild(glue);
       }
     }
