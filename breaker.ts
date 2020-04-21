@@ -1,3 +1,5 @@
+import { hyphenateSync } from 'hyphen/en';
+
 class Box {
   /**
   A box refers to something that is to be typeset: either a character from some font
@@ -304,7 +306,7 @@ class Break {
     let prev_a = null;
     let D = [Infinity, Infinity, Infinity, Infinity];
     let Dmax = Infinity;
-    let Ac = [null, null, null, null];
+    let Ac: Array<NetworkNode> = [null, null, null, null];
     while (true) {
       let next_a;
       while (true) {
@@ -370,8 +372,8 @@ class Break {
   demerits(a: NetworkNode, b: number, r: number): [number, number] {
     let d: number;
     let c: number;
-    let bp = this.paragraph[b].penalty;
-    let bf = this.paragraph[b].flagged;
+    let bp = this.paragraph.body[b].penalty;
+    let bf = this.paragraph.body[b].flagged;
     if (bp >= 0) {
       d = Math.pow(1 + 100 * Math.pow(Math.abs(r), 3) + bp, 2);
     } else if (bp !== Infinity) {
@@ -627,6 +629,24 @@ class WebPar extends Paragraph {
   }
 }
 
+function insert_word_or_hyphen(word_list: DocumentFragment, word_string: string) {
+  let word_parts = word_string.split(HYPENCHAR);
+  for (let i = 0; i < word_parts.length; i++) {
+    let word_part = document.createElement('span');
+    word_part.setAttribute('class', 'break box');
+    word_part.innerText = word_parts[i];
+    word_list.appendChild(word_part);
+    if (i < word_parts.length - 1) {
+      // add hyphen penalty
+      let penalty = document.createElement('span');
+      penalty.setAttribute('class', 'break penalty');
+      word_list.appendChild(penalty);
+    }
+  }
+}
+
+var HYPENCHAR = '_breakerhyphen_';
+
 window.addEventListener('DOMContentLoaded', (event) => {
   console.log("Starting");
   // get all paragraphs
@@ -658,15 +678,16 @@ window.addEventListener('DOMContentLoaded', (event) => {
 
     // do replacement of pars
     // construct list in *memory* (no effect to DOM)
-    let text = paragraphs[i].innerText;
+    let text = hyphenateSync(paragraphs[i].innerText, { hyphenChar: HYPENCHAR });
+    console.log(text);
     // split by whitespace
     let processed = text.replace(/\s+/g, ' ').replace(/(^\s+)|(\s+$)/g, '').split(' ')
     let word_list = document.createDocumentFragment();
     for (let i = 0; i < processed.length; i++) {
-      let word = document.createElement('span');
-      word.setAttribute('class', 'break box');
-      word.innerText = processed[i];
-      word_list.appendChild(word);
+
+      // insert words and hyphen penalties
+      insert_word_or_hyphen(word_list, processed[i]);
+
       // inter-word glue
       if (i < processed.length - 1) {
         let glue = document.createElement('span');

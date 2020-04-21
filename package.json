@@ -6,12 +6,19 @@
   "dependencies": {
     "@microsoft/tsdoc": "^0.12.19",
     "@types/node": "^13.13.0",
+    "browserify": "^16.5.1",
+    "hyphen": "^1.5.1",
     "tsc": "^1.20150623.0",
+    "tsify": "^4.0.1",
+    "tslib": "^1.11.1",
+    "watchify": "^3.11.1"
+  },
+  "devDependencies": {
     "typescript": "^3.8.3"
   },
-  "devDependencies": {},
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "browserify breaker.ts -p [ tsify --noImplicitAny ] > out/breaker.js",
+    "watch": "watchify breaker.ts -p [ tsify --noImplicitAny ] -o out/breaker.js"
   },
   "author": "Avery Laird",
   "license": "ISC"
