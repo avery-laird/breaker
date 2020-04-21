@@ -587,13 +587,6 @@ function insertBreaks(breakpoints: Array<number>, par: Paragraph): string {
  */
 class WebPar extends Paragraph {
 
-  ruler: Element;
-  /**
-   * watch for changes to the ruler innerHTML
-   */
-  mutationObserver: MutationObserver;
-
-
   constructor() {
     super();
     /**
@@ -602,9 +595,6 @@ class WebPar extends Paragraph {
      * of the paragraph back into the paragraph as a sequence of <span>. Then, once
      * the spans are rendered, step through each word to get the width.
      */
-    // this.mutationObserver = new MutationObserver(mut => {
-    //   console.log("change to ruler innerHTML");
-    // })
   }
 
   /**
@@ -612,9 +602,63 @@ class WebPar extends Paragraph {
    * @param text - The raw paragraph text to break
    */
   build(target: HTMLElement) {
-    // this.buildRuler(target);
+    // now we can assume that the paragraph is a span sequence
+    console.log("in par.build()");
+    let words = Array.from(target.childNodes);
+    for (let i = 0; i < words.length; i++) {
+      // get widths of words
+      if ((words[i] as HTMLElement).classList.contains('box')) {
+        console.log((words[i] as HTMLElement).getBoundingClientRect().width + "px");
+      }
+    }
 
-    let text = target.innerText;
+    // for (let i = 0; i < processed.length; i++) {
+    //   // get box width
+    //   this.body.push(new Box(this.measure(processed[i]), processed[i]));
+    //   if (i < processed.length - 1)
+    //     this.body.push(new Glue(this.measure(' '), 1, 1));
+    // }
+    // this.body.push(new Glue(0, Infinity, 0));
+    // this.body.push(new Penalty(0, -Infinity, 0));
+  }
+
+  clear() {
+    this.body = [];
+  }
+}
+
+window.addEventListener('DOMContentLoaded', (event) => {
+  console.log("Starting");
+  // get all paragraphs
+  let paragraphs = document.getElementsByTagName('p');
+  let breaker = new Break();
+
+  // set up an MO to catch the updated pars
+  new MutationObserver((mutationList, observer) => {
+    console.log("New pars detected");
+    mutationList.forEach(elem => {
+      console.log(elem);
+      // check all the added nodes
+      for (let i = 0; i < elem.addedNodes.length; i++) {
+        // if added node is a <p class="break par">, then
+        // try the transformation
+        if ((elem.addedNodes[i] as HTMLElement).classList.contains('par')) {
+          let par = new WebPar();
+          par.build(elem.addedNodes[i] as HTMLElement);
+        }
+      }
+    });
+  }).observe(document.body, { childList: true } as MutationObserverInit);
+
+  for (let i = 0; i < paragraphs.length; i++) {
+    // get width
+    let rect = paragraphs[i].getBoundingClientRect();
+    let width = rect.width; // in px
+    console.log(width + "px");
+
+    // do replacement of pars
+    // construct list in *memory* (no effect to DOM)
+    let text = paragraphs[i].innerText;
     // split by whitespace
     let processed = text.replace(/\s+/g, ' ').replace(/(^\s+)|(\s+$)/g, '').split(' ')
     let word_list = document.createDocumentFragment();
@@ -631,74 +675,13 @@ class WebPar extends Paragraph {
         word_list.appendChild(glue);
       }
     }
+
     // create new paragraph
     let new_par = document.createElement('p');
+    new_par.setAttribute('class', 'break par');
     new_par.appendChild(word_list);
 
     // replace old paragraph
-    target.parentElement.replaceChild(new_par, target);
-
-
-    // for (let i = 0; i < processed.length; i++) {
-    //   // get box width
-    //   this.body.push(new Box(this.measure(processed[i]), processed[i]));
-    //   if (i < processed.length - 1)
-    //     this.body.push(new Glue(this.measure(' '), 1, 1));
-    // }
-    // this.body.push(new Glue(0, Infinity, 0));
-    // this.body.push(new Penalty(0, -Infinity, 0));
-  }
-
-  clear() {
-    this.body = [];
-  }
-
-  /**
-   * Given some text, apply the computed styles
-   * and measure it's width in px
-   * 
-   * @param text - text to measure
-   */
-  measure(text: string): number {
-    this.ruler.innerHTML = text;
-    return this.ruler.getBoundingClientRect().width;
-  }
-
-  buildRuler(target: Element) {
-    // add the ruler
-    this.ruler = document.createElement('div');
-    this.ruler.classList.add('ruler');
-    // get applied styles to par
-    let applied_styles = window.getComputedStyle(target);
-    this.ruler.setAttribute('style', `font-size: ${applied_styles.getPropertyValue('font-size')}; visibility: hidden; position: absolute; top: -8000px; width: auto; display: inline; left: -8000px;`);
-    this.mutationObserver.observe(this.ruler, { innerHTML: true } as MutationObserverInit)
-  }
-
-}
-
-window.addEventListener('DOMContentLoaded', (event) => {
-  console.log("Starting");
-  // get all paragraphs
-  let paragraphs = document.getElementsByTagName('p');
-  let breaker = new Break();
-  for (let i = 0; i < paragraphs.length; i++) {
-    // get width
-    let rect = paragraphs[i].getBoundingClientRect();
-    let width = rect.width; // in px
-    console.log(width + "px");
-
-    // build par
-    let par = new WebPar();
-
-    // no par.build() takes care of breaking as well,
-    // because we don't know when the word widths will
-    // be available
-    par.build(paragraphs[i]);
-
-    // for now, assume all lines are the same length
-    // let breakpoints = breaker.break(par, [width]);
-    // let newpartext = insertBreaks(breakpoints, par);
-    // console.log(newpartext);
-    // paragraphs[i].innerHTML = newpartext;
+    paragraphs[i].parentElement.replaceChild(new_par, paragraphs[i]);
   }
 });
