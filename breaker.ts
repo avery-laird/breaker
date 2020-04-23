@@ -234,7 +234,7 @@ class Break {
   constructor() {
     // some sane defaults
     this.q = 0;
-    this.roh = 2;
+    this.roh = 5;
     this.alpha = 0;
     this.gamma = 0;
   }
@@ -245,7 +245,7 @@ class Break {
     return this.lines_array[i];
   }
 
-  break(paragraph: Paragraph, lines_array: Array<number>): Array<number> {
+  break(paragraph: Paragraph, lines_array: Array<number>): { breakpoints: Array<number>, ratios: Array<number> } {
 
     this.paragraph = paragraph;
     this.lines_array = lines_array;
@@ -292,24 +292,27 @@ class Break {
     // TODO: use the chosen node to determine the optimal breakpoint sequence
     // BEGIN: use the chosen node to determine the optimal breakpoint sequence
     let breakpoints: Array<number> = Array(linenumber + 1);
-    let ratios: Array<number> = Array(linenumber);
+    let ratios: Array<number> = Array(linenumber + 1);
+    ratios[0] = undefined;
     for (let j = linenumber; j >= 0; j--) {
       // DEBUG   
-      if (j < linenumber) {
-        let closest_box_before_break: number = 0;
-        for (let k = chosen.position; k >= 0; k--) {
-          if (this.paragraph.body[k].type === 'box') {
-            closest_box_before_break = k;
-            break;
-          }
-        }
-        console.log(`ratio: ${chosen.previous ? chosen.previous.ratio : ' '}, line: ${j}, node: ${this.paragraph.body[closest_box_before_break].toString()}`);
-      }
+      // if (j < linenumber) {
+      //   let closest_box_before_break: number = 0;
+      //   for (let k = chosen.position; k >= 0; k--) {
+      //     if (this.paragraph.body[k].type === 'box') {
+      //       closest_box_before_break = k;
+      //       break;
+      //     }
+      //   }
+      //   console.log(`ratio: ${chosen.previous ? chosen.previous.ratio : ' '}, line: ${j}, node: ${this.paragraph.body[closest_box_before_break].toString()}`);
+      // }
+
       breakpoints[j] = chosen.position;
       chosen = chosen.previous;
+      ratios[j] = chosen ? chosen.ratio : undefined;
     }
     // END: use the chosen node to determine the optimal breakpoint sequence
-    return breakpoints;
+    return { breakpoints: breakpoints, ratios: ratios };
   }
 
   mainLoop(b: number) {
@@ -677,13 +680,27 @@ window.addEventListener('DOMContentLoaded', (event) => {
           par.build(paragraph_element);
           // get par width (assume is box for now)
           let width = paragraph_element.getBoundingClientRect().width;
-          let breakpoints = breaker.break(par, [width]);
-          console.log(breakpoints);
+          let { breakpoints, ratios } = breaker.break(par, [width]);
+          // console.log(breakpoints);
+          // console.log(ratios);
 
-          // collect all breakpoint nodes *first*
+          // collect all breakpoint nodes 
           let dom_breakpoints: Array<HTMLElement> = [];
           for (let j = 1; j < breakpoints.length && breakpoints[j] + PAR_ARRAY_OFFSET < paragraph_element.childNodes.length; j++)
             dom_breakpoints.push(paragraph_element.childNodes[breakpoints[j] + PAR_ARRAY_OFFSET] as HTMLElement);
+
+          // collect all glue
+          let glue_by_line: Array<Array<HTMLElement>> = [];
+          // initialize array
+          for (let j = 0; j < breakpoints.length; j++)
+            glue_by_line.push([]);
+          for (let j = PAR_ARRAY_OFFSET, line = 1; j < paragraph_element.childNodes.length; j++) {
+            if ((paragraph_element.childNodes[j] as HTMLElement).classList.contains('glue'))
+              glue_by_line[line].push(paragraph_element.childNodes[j] as HTMLElement);
+            if (breakpoints[line] === j)
+              line++;
+          }
+          // console.log(glue_by_line);
 
           // now, insert <br>
           for (let j = 0; j < dom_breakpoints.length; j++) {
@@ -697,6 +714,22 @@ window.addEventListener('DOMContentLoaded', (event) => {
               hyphen.textContent = '-';
               dom_breakpoints[j].insertAdjacentElement('afterend', hyphen);
               hyphen.insertAdjacentElement('afterend', document.createElement('br'));
+            }
+          }
+
+          let space_width = (paragraph_element.childNodes[1] as HTMLElement).getBoundingClientRect().width;
+          let space_stretch = (space_width) / 6;
+          let space_shrink = (space_width) / 9;
+          // now, adjust glue
+          for (let line = 1; line < breakpoints.length; line++) {
+            let glue_line: Array<HTMLElement> = glue_by_line[line];
+            for (let glue = 0; glue < glue_line.length; glue++) {
+              let adjustment = glue_line[glue].getBoundingClientRect().width;
+              if (ratios[line] < 0)
+                adjustment += ratios[line] * space_shrink;
+              else
+                adjustment += ratios[line] * space_stretch;
+              glue_line[glue].setAttribute('style', `width: ${adjustment}px;`);
             }
           }
         }
