@@ -296,16 +296,16 @@ class Break {
     ratios[0] = undefined;
     for (let j = linenumber; j >= 0; j--) {
       // DEBUG   
-      // if (j < linenumber) {
-      //   let closest_box_before_break: number = 0;
-      //   for (let k = chosen.position; k >= 0; k--) {
-      //     if (this.paragraph.body[k].type === 'box') {
-      //       closest_box_before_break = k;
-      //       break;
-      //     }
-      //   }
-      //   console.log(`ratio: ${chosen.previous ? chosen.previous.ratio : ' '}, line: ${j}, node: ${this.paragraph.body[closest_box_before_break].toString()}`);
-      // }
+      if (j < linenumber) {
+        let closest_box_before_break: number = 0;
+        for (let k = chosen.position; k >= 0; k--) {
+          if (this.paragraph.body[k].type === 'box') {
+            closest_box_before_break = k;
+            break;
+          }
+        }
+        console.log(`[LINE] (${j})\tratio: ${chosen.previous ? chosen.previous.ratio : ' '}, node: ${this.paragraph.body[closest_box_before_break].toString()}`);
+      }
 
       breakpoints[j] = chosen.position;
       chosen = chosen.previous;
@@ -613,14 +613,14 @@ class WebPar extends Paragraph {
 
     for (let i = PAR_ARRAY_OFFSET; i < words.length; i++) {
       // get widths of words
-      if ((words[i] as HTMLElement).classList.contains('box')) {
+      if ((words[i] as HTMLElement).classList.contains(BOX_CLASS)) {
         this.body.push(new Box(
           (words[i] as HTMLElement).getBoundingClientRect().width, // px
           words[i].textContent
         ));
-      } else if ((words[i] as HTMLElement).classList.contains('glue')) {
+      } else if ((words[i] as HTMLElement).classList.contains(GLUE_CLASS)) {
         this.body.push(new Glue(space_width, space_stretch, space_shrink));
-      } else if ((words[i] as HTMLElement).classList.contains('penalty')) {
+      } else if ((words[i] as HTMLElement).classList.contains(PEN_CLASS)) {
         this.body.push(new Penalty(hyphen_width, 100, 1)); // guessing penalty = 100
       }
     }
@@ -646,13 +646,13 @@ function insert_word_or_hyphen(word_list: DocumentFragment, word_string: string)
   let word_parts = word_string.split(HYPENCHAR);
   for (let i = 0; i < word_parts.length; i++) {
     let word_part = document.createElement('span');
-    word_part.setAttribute('class', 'break box');
+    word_part.setAttribute('class', `break ${BOX_CLASS}`);
     word_part.textContent = word_parts[i];
     word_list.appendChild(word_part);
     if (i < word_parts.length - 1) {
       // add hyphen penalty
       let penalty = document.createElement('span');
-      penalty.setAttribute('class', 'break penalty');
+      penalty.setAttribute('class', `break ${PEN_CLASS}`);
       word_list.appendChild(penalty);
     }
   }
@@ -660,6 +660,9 @@ function insert_word_or_hyphen(word_list: DocumentFragment, word_string: string)
 
 var HYPENCHAR = '_breakerhyphen_';
 var PAR_ARRAY_OFFSET = 2; // reserve 1st two spots for space and hyphen
+var GLUE_CLASS = 'breaker-glue';
+var BOX_CLASS = 'breaker-box';
+var PEN_CLASS = 'breaker-penalty';
 
 window.addEventListener('DOMContentLoaded', (event) => {
   // get all paragraphs
@@ -695,7 +698,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
           for (let j = 0; j < breakpoints.length; j++)
             glue_by_line.push([]);
           for (let j = PAR_ARRAY_OFFSET, line = 1; j < paragraph_element.childNodes.length; j++) {
-            if ((paragraph_element.childNodes[j] as HTMLElement).classList.contains('glue'))
+            if ((paragraph_element.childNodes[j] as HTMLElement).classList.contains(GLUE_CLASS))
               glue_by_line[line].push(paragraph_element.childNodes[j] as HTMLElement);
             if (breakpoints[line] === j)
               line++;
@@ -704,11 +707,11 @@ window.addEventListener('DOMContentLoaded', (event) => {
 
           // now, insert <br>
           for (let j = 0; j < dom_breakpoints.length; j++) {
-            if (dom_breakpoints[j].classList.contains('glue')) {
+            if (dom_breakpoints[j].classList.contains(GLUE_CLASS)) {
               dom_breakpoints[j].insertAdjacentElement('afterend', document.createElement('br'));
               // from span_element back to the next breakpoint,
               // stretch all glue
-            } else if (dom_breakpoints[j].classList.contains('penalty')) {
+            } else if (dom_breakpoints[j].classList.contains(PEN_CLASS)) {
               // insert hyphen, then break
               let hyphen = document.createElement('span');
               hyphen.textContent = '-';
@@ -735,7 +738,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
         }
       }
     });
-  }).observe(document.body, { childList: true } as MutationObserverInit);
+  }).observe(document.body, { childList: true, subtree: true } as MutationObserverInit);
 
   for (let i = 0; i < paragraphs.length; i++) {
     // do replacement of pars
@@ -766,7 +769,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
       // inter-word glue
       if (i < processed.length - 1) {
         let glue = document.createElement('span');
-        glue.setAttribute('class', 'break glue');
+        glue.setAttribute('class', `break ${GLUE_CLASS}`);
         let space = document.createTextNode('\u2005');
         glue.appendChild(space);
         word_list.appendChild(glue);
