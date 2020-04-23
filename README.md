@@ -6,5 +6,5 @@ I'm writing this to get a better understanding of how the algorithm works, with 
 
 ## Current examples:
 
-[!test 1](test1.png)
-[!test 2](test2.png)
+![test 1](test1.png?raw=true)
+![test 2](test2.png?raw=true)
