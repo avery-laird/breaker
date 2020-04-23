@@ -14,6 +14,7 @@ This isn't a very efficient solution, because we will need to render that box ag
 ## Progress
 - [x] hyphenation
 - [x] overfull boxes
+- [ ] detect floating content 
 - [ ] Knuth-Plass in linear time using SMAWK and Rust -> WASM 
 
 ## Current examples:
