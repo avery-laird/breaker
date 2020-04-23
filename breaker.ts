@@ -49,8 +49,8 @@ class Glue {
   flagged: number;
   constructor(w: number, y: number, z: number) {
     this.width = w;
-    this.shrinkability = y;
-    this.stretchability = z;
+    this.stretchability = y;
+    this.shrinkability = z;
     this.type = 'glue';
     this.penalty = 0;
     this.flagged = 0;
@@ -180,7 +180,8 @@ class NetworkNode {
     totalshrink: number,
     totaldemerits: number,
     previous: NetworkNode,
-    link: NetworkNode) {
+    link: NetworkNode,
+    ratio: number) {
     this.position = position;
     this.line = line;
     this.fitness = fitness;
@@ -191,6 +192,7 @@ class NetworkNode {
     this.previous = previous;
     this.link = link;
     this.active = true;
+    this.ratio = ratio;
   }
 
   deactivate(prev_a: NetworkNode, active_list: NetworkNode, next_a: NetworkNode, passive_list: NetworkNode) {
@@ -232,7 +234,7 @@ class Break {
   constructor() {
     // some sane defaults
     this.q = 0;
-    this.roh = Infinity;
+    this.roh = 2;
     this.alpha = 0;
     this.gamma = 0;
   }
@@ -243,13 +245,13 @@ class Break {
     return this.lines_array[i];
   }
 
-  break(paragraph: Paragraph, lines_array: Array<number>) {
+  break(paragraph: Paragraph, lines_array: Array<number>): Array<number> {
 
     this.paragraph = paragraph;
     this.lines_array = lines_array;
 
     // DONE: create an active node representing the beginning of the paragraph
-    this.active_list = new NetworkNode(0, 0, 1, 0, 0, 0, 0, null, null);
+    this.active_list = new NetworkNode(0, 0, 1, 0, 0, 0, 0, null, null, undefined);
     this.passive_list = null;
 
     this.sum_w = 0;
@@ -290,9 +292,19 @@ class Break {
     // TODO: use the chosen node to determine the optimal breakpoint sequence
     // BEGIN: use the chosen node to determine the optimal breakpoint sequence
     let breakpoints: Array<number> = Array(linenumber + 1);
+    let ratios: Array<number> = Array(linenumber);
     for (let j = linenumber; j >= 0; j--) {
-      // DEBUG 
-      console.log(chosen.ratio);
+      // DEBUG   
+      if (j < linenumber) {
+        let closest_box_before_break: number = 0;
+        for (let k = chosen.position; k >= 0; k--) {
+          if (this.paragraph.body[k].type === 'box') {
+            closest_box_before_break = k;
+            break;
+          }
+        }
+        console.log(`ratio: ${chosen.previous ? chosen.previous.ratio : ' '}, line: ${j}, node: ${this.paragraph.body[closest_box_before_break].toString()}`);
+      }
       breakpoints[j] = chosen.position;
       chosen = chosen.previous;
     }
@@ -304,21 +316,22 @@ class Break {
     let par = this.paragraph.body;
     let a = this.active_list;
     let prev_a = null;
-    let D = [Infinity, Infinity, Infinity, Infinity];
-    let Dmax = Infinity;
     let Ac: Array<NetworkNode> = [null, null, null, null];
+    let D, Dmax;
     while (true) {
+      D = [Infinity, Infinity, Infinity, Infinity];
+      Dmax = Infinity;
       let next_a;
       while (true) {
         next_a = a.link;
         // TODO: compute adjustment ratio r from a to b
         // BEGIN: adj ratio from a to b (a, par, lines) -> (r, j)
-        let [L, j, r] = this.computeAdjustmentRatio(par, a, b);
+        let [j, r] = this.computeAdjustmentRatio(par, a, b);
         // END: adj ratio r from a to b
         if (r < -1 || par[b].penalty === -Infinity) {
           // TODO: deactivate node a
           // BEGIN: deactivate node a
-          this.deactivateNode(a, prev_a, next_a);
+          r = this.deactivateNode(a, prev_a, next_a, Dmax, r);
           // END: deactivate node a
         } else {
           prev_a = a;
@@ -329,6 +342,7 @@ class Break {
           let [d, c] = this.computeDemeritsAndFitnessClass(par, a, b, r);
           // END: compute demerits d and fitness class c
           if (d < D[c]) {
+            a.ratio = r;
             D[c] = d;
             Ac[c] = a;
             if (d < Dmax)
@@ -421,7 +435,7 @@ class Break {
     return [tw, ty, tz];
   }
 
-  computeAdjustmentRatio(par: Array<ParagraphSequenceElement>, a: NetworkNode, b: number): [number, number, number] {
+  computeAdjustmentRatio(par: Array<ParagraphSequenceElement>, a: NetworkNode, b: number): [number, number] {
     let L = this.sum_w - a.totalwidth;
     let r;
     if (par[b].type === 'penalty')
@@ -444,18 +458,24 @@ class Break {
     } else {
       r = 0;
     }
-    a.ratio = r;
-    return [L, j, r];
+    return [j, r];
   }
 
-  deactivateNode(a: NetworkNode, prev_a: NetworkNode, next_a: NetworkNode) {
+  deactivateNode(a: NetworkNode, prev_a: NetworkNode, next_a: NetworkNode, Dmax: number, r: number): number {
     if (prev_a === null) {
       this.active_list = next_a;
     } else {
       prev_a.link = next_a;
     }
-    a.link = this.passive_list;
-    this.passive_list = a;
+    if (this.active_list === null && Dmax === Infinity && r < -1) {
+      // handle overfull box
+      this.active_list = a;
+      return -1;
+    } else {
+      a.link = this.passive_list;
+      this.passive_list = a;
+      return r;
+    }
   }
 
   computeDemeritsAndFitnessClass(par: Array<ParagraphSequenceElement>, a: NetworkNode, b: number, r: number): [number, number] {
@@ -488,7 +508,7 @@ class Break {
     let tw = this.sum_w;
     let ty = this.sum_y;
     let tz = this.sum_z;
-    for (let i = b; i > par.length; i++) {
+    for (let i = b; i < par.length; i++) {
       if (par[i].type === 'box')
         break;
       if (par[i].type === 'glue') {
@@ -509,7 +529,7 @@ class Break {
     // END: compute tw, ty, tz
     for (let c = 0; c < 4; c++) {
       if (D[c] <= Dmax + this.gamma) {
-        let s = new NetworkNode(b, Ac[c].line + 1, c, tw, ty, tz, D[c], Ac[c], a);
+        let s = new NetworkNode(b, Ac[c].line + 1, c, tw, ty, tz, D[c], Ac[c], a, Ac[c].ratio);
         if (prev_a === null) {
           this.active_list = s; // ??? paper says d, but I'm guessing it should be s
         } else {
@@ -556,34 +576,6 @@ class Break {
 }
 
 
-// let partest = new Paragraph();
-// partest.build("Far out in the uncharted backwaters of the unfashionable end of the western spiral arm of the Galaxy lies a small unregarded yellow sun. Orbiting this at a distance of roughly ninety-­‐two million miles is an utterly insignificant little blue green planet whose ape-­‐descended life forms are so amazingly primitive that they still think digital watches are a pretty neat idea. This planet hasʹor rather hadʹa problem, which was this: most of the people on it were unhappy for pretty much of the time. Many solutions were suggested for this problem, but most of these were largely concerned with the movements of small green pieces of paper, which is odd because on the whole it wasn't the small green pieces of paper that were unhappy.");
-// let breaker = new Break(partest, [60]);
-// let test = breaker.break();
-
-// process.stdout.write('\n\n');
-// for (let i = 0, j = 1, toPrint = ''; i < partest.body.length; i++, toPrint = '') {
-//   toPrint = partest.body[i].toString();
-//   if (test[j] === i) {
-//     toPrint += '\n';
-//     j++;
-//   }
-//   process.stdout.write(toPrint);
-// }
-// process.stdout.write('\n\n');
-
-function insertBreaks(breakpoints: Array<number>, par: Paragraph): string {
-  let result = '';
-  for (let i = 0, j = 1; i < par.body.length; i++) {
-    result += par.body[i].toString();
-    if (breakpoints[j] === i) {
-      result += '\n';
-      j++;
-    }
-  }
-  return result;
-}
-
 /**
  * provide functionality for the web
  */
@@ -607,13 +599,31 @@ class WebPar extends Paragraph {
     // now we can assume that the paragraph is a span sequence
     console.log("in par.build()");
     let words = Array.from(target.childNodes);
-    for (let i = 0; i < words.length; i++) {
+
+    // first two spots are reserved for space and hyphen
+    let space_width = (words[1] as HTMLElement).getBoundingClientRect().width;
+    let hyphen_width = (words[0] as HTMLElement).getBoundingClientRect().width;
+    // let space_stretch = (5) / 6;
+    // let space_shrink = (5) / 9;
+    let space_stretch = (space_width) / 6;
+    let space_shrink = (space_width) / 9;
+
+    for (let i = PAR_ARRAY_OFFSET; i < words.length; i++) {
       // get widths of words
       if ((words[i] as HTMLElement).classList.contains('box')) {
-        console.log((words[i] as HTMLElement).getBoundingClientRect().width + "px");
+        this.body.push(new Box(
+          (words[i] as HTMLElement).getBoundingClientRect().width, // px
+          words[i].textContent
+        ));
+      } else if ((words[i] as HTMLElement).classList.contains('glue')) {
+        this.body.push(new Glue(space_width, space_stretch, space_shrink));
+      } else if ((words[i] as HTMLElement).classList.contains('penalty')) {
+        this.body.push(new Penalty(hyphen_width, 100, 1)); // guessing penalty = 100
       }
     }
 
+    this.body.push(new Glue(0, Infinity, 0));
+    this.body.push(new Penalty(0, -Infinity, 1))
     // for (let i = 0; i < processed.length; i++) {
     //   // get box width
     //   this.body.push(new Box(this.measure(processed[i]), processed[i]));
@@ -634,7 +644,7 @@ function insert_word_or_hyphen(word_list: DocumentFragment, word_string: string)
   for (let i = 0; i < word_parts.length; i++) {
     let word_part = document.createElement('span');
     word_part.setAttribute('class', 'break box');
-    word_part.innerText = word_parts[i];
+    word_part.textContent = word_parts[i];
     word_list.appendChild(word_part);
     if (i < word_parts.length - 1) {
       // add hyphen penalty
@@ -646,43 +656,75 @@ function insert_word_or_hyphen(word_list: DocumentFragment, word_string: string)
 }
 
 var HYPENCHAR = '_breakerhyphen_';
+var PAR_ARRAY_OFFSET = 2; // reserve 1st two spots for space and hyphen
 
 window.addEventListener('DOMContentLoaded', (event) => {
-  console.log("Starting");
   // get all paragraphs
   let paragraphs = document.getElementsByTagName('p');
   let breaker = new Break();
 
   // set up an MO to catch the updated pars
   new MutationObserver((mutationList, observer) => {
-    console.log("New pars detected");
     mutationList.forEach(elem => {
       console.log(elem);
       // check all the added nodes
       for (let i = 0; i < elem.addedNodes.length; i++) {
         // if added node is a <p class="break par">, then
         // try the transformation
-        if ((elem.addedNodes[i] as HTMLElement).classList.contains('par')) {
+        let paragraph_element: HTMLElement = (elem.addedNodes[i] as HTMLElement);
+        if (paragraph_element.classList.contains('par')) {
           let par = new WebPar();
-          par.build(elem.addedNodes[i] as HTMLElement);
+          par.build(paragraph_element);
+          // get par width (assume is box for now)
+          let width = paragraph_element.getBoundingClientRect().width;
+          let breakpoints = breaker.break(par, [width]);
+          console.log(breakpoints);
+
+          // collect all breakpoint nodes *first*
+          let dom_breakpoints: Array<HTMLElement> = [];
+          for (let j = 1; j < breakpoints.length && breakpoints[j] + PAR_ARRAY_OFFSET < paragraph_element.childNodes.length; j++)
+            dom_breakpoints.push(paragraph_element.childNodes[breakpoints[j] + PAR_ARRAY_OFFSET] as HTMLElement);
+
+          // now, insert <br>
+          for (let j = 0; j < dom_breakpoints.length; j++) {
+            if (dom_breakpoints[j].classList.contains('glue')) {
+              dom_breakpoints[j].insertAdjacentElement('afterend', document.createElement('br'));
+              // from span_element back to the next breakpoint,
+              // stretch all glue
+            } else if (dom_breakpoints[j].classList.contains('penalty')) {
+              // insert hyphen, then break
+              let hyphen = document.createElement('span');
+              hyphen.textContent = '-';
+              dom_breakpoints[j].insertAdjacentElement('afterend', hyphen);
+              hyphen.insertAdjacentElement('afterend', document.createElement('br'));
+            }
+          }
         }
       }
     });
   }).observe(document.body, { childList: true } as MutationObserverInit);
 
   for (let i = 0; i < paragraphs.length; i++) {
-    // get width
-    let rect = paragraphs[i].getBoundingClientRect();
-    let width = rect.width; // in px
-    console.log(width + "px");
-
     // do replacement of pars
     // construct list in *memory* (no effect to DOM)
     let text = hyphenateSync(paragraphs[i].innerText, { hyphenChar: HYPENCHAR });
-    console.log(text);
+
     // split by whitespace
     let processed = text.replace(/\s+/g, ' ').replace(/(^\s+)|(\s+$)/g, '').split(' ')
     let word_list = document.createDocumentFragment();
+
+    // first, insert a hyphen and space so we can measure them
+    // at the same time
+    let hyphen = document.createElement('span');
+    hyphen.textContent = '-';
+    // position out of view
+    hyphen.setAttribute('style', 'position: absolute; top: -8000px; left: -8000px;');
+    let space = document.createElement('span');
+    space.textContent = '\u2005';
+    space.setAttribute('style', 'position: absolute; top: -8000px; left: -8000px;');
+    word_list.appendChild(hyphen);
+    word_list.appendChild(space);
+
     for (let i = 0; i < processed.length; i++) {
 
       // insert words and hyphen penalties
@@ -692,7 +734,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
       if (i < processed.length - 1) {
         let glue = document.createElement('span');
         glue.setAttribute('class', 'break glue');
-        let space = document.createTextNode('\u202F');
+        let space = document.createTextNode('\u2005');
         glue.appendChild(space);
         word_list.appendChild(glue);
       }
