@@ -15,6 +15,8 @@ This isn't a very efficient solution, because we will need to render that box ag
 - [x] hyphenation
 - [x] overfull boxes
 - [ ] detect floating content 
+- [ ] link-aware
+- [ ] math-aware (hook into mathjax)
 - [ ] Knuth-Plass in linear time using SMAWK and Rust -> WASM 
 
 ## Current examples:

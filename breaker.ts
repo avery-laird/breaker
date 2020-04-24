@@ -623,18 +623,12 @@ class WebPar extends Paragraph {
       } else if ((words[i] as HTMLElement).classList.contains(PEN_CLASS)) {
         this.body.push(new Penalty(hyphen_width, 100, 1)); // guessing penalty = 100
       }
+      if (DEBUG)
+        console.log(`${words[i].textContent} -> ${(words[i] as HTMLElement).getBoundingClientRect().width}px wide`);
     }
 
     this.body.push(new Glue(0, Infinity, 0));
     this.body.push(new Penalty(0, -Infinity, 1))
-    // for (let i = 0; i < processed.length; i++) {
-    //   // get box width
-    //   this.body.push(new Box(this.measure(processed[i]), processed[i]));
-    //   if (i < processed.length - 1)
-    //     this.body.push(new Glue(this.measure(' '), 1, 1));
-    // }
-    // this.body.push(new Glue(0, Infinity, 0));
-    // this.body.push(new Penalty(0, -Infinity, 0));
   }
 
   clear() {
@@ -663,8 +657,9 @@ var PAR_ARRAY_OFFSET = 2; // reserve 1st two spots for space and hyphen
 var GLUE_CLASS = 'breaker-glue';
 var BOX_CLASS = 'breaker-box';
 var PEN_CLASS = 'breaker-penalty';
+var DEBUG = true;
 
-window.addEventListener('DOMContentLoaded', (event) => {
+window.addEventListener('load', (event) => {
   // get all paragraphs
   let paragraphs = document.getElementsByTagName('p');
   let breaker = new Break();
