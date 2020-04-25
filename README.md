@@ -20,6 +20,8 @@ This isn't a very efficient solution, because we will need to render that box ag
 - [ ] Knuth-Plass in linear time using SMAWK and Rust -> WASM 
 
 ## Current examples:
-
+### Testing floats
 ![image test](image-test.png?raw=true "Testing floats")
+
+### Excerpt from Hitchhiker's Guide to the Galaxy
 ![hitchhikers](test1.png?raw=true "Excerpt from Hitchhiker's Guide to the Galaxy")
