@@ -636,6 +636,64 @@ class WebPar extends Paragraph {
   }
 }
 
+class WebBreak extends Break {
+  /** width of element (px) */
+  width: number;
+  /** height of line (px) */
+  line_height: number;
+  /** x position of element (px) */
+  x: number;
+  /** y position of element (px) */
+  y: number;
+  /** because line width queries the DOM,
+   * it's expensive, so use a cache to store
+   * already calculated lengths
+   */
+  line_cache: Map<number, number>;
+
+  constructor(x: number, y: number, width: number, line_height: number) {
+    super();
+    this.width = width;
+    this.line_height = line_height;
+    this.x = x;
+    this.y = y;
+    this.line_cache = new Map();
+  }
+
+  /** make knuth-plass aware of floating content */
+  lines(i: number): number {
+    // check cache
+    let check = this.line_cache.get(i);
+    if (check)
+      return check;
+
+    // get current line box
+    let line_box = {
+      x: this.x,
+      y: this.y + (i * this.line_height) + this.line_height / 2,
+      width: this.width,
+      height: this.line_height
+    };
+    // split the difference and get dimensions
+    let boxes: Array<DOMRect> = document
+      .elementsFromPoint(line_box.x + line_box.width, line_box.y)
+      .filter((x: Element) => !x.classList.contains(BASE_CLASS)) // skip breaker spans
+      .map(x => x.getBoundingClientRect());
+
+    // store left-most (biggest) overlap
+    let overlap: number = 0;
+    for (let j = 0; j < boxes.length; j++) {
+      if (boxes[j].x <= line_box.x) continue; // skip covering boxes
+      if (boxes[j].x >= line_box.x && boxes[j].x <= line_box.x + line_box.width) {
+        if ((line_box.x + line_box.width - boxes[j].x) > overlap)
+          overlap = line_box.x + line_box.width - boxes[j].x;
+      }
+    }
+    this.line_cache.set(i, this.width - overlap);
+    return this.width - overlap;
+  }
+}
+
 function insert_word_or_hyphen(word_list: DocumentFragment, word_string: string) {
   let word_parts = word_string.split(HYPENCHAR);
   for (let i = 0; i < word_parts.length; i++) {
@@ -657,28 +715,78 @@ var PAR_ARRAY_OFFSET = 2; // reserve 1st two spots for space and hyphen
 var GLUE_CLASS = 'breaker-glue';
 var BOX_CLASS = 'breaker-box';
 var PEN_CLASS = 'breaker-penalty';
+var BASE_CLASS = 'break';
 var DEBUG = true;
+
+// function lines_from_par(par: HTMLElement, lineheight: number): Array<number> {
+//   let dims = par.getBoundingClientRect();
+//   type point = { x: number, y: number };
+
+//   function points_from_line(fixed: number, length: number, base: number, res: number = 1): Array<point> {
+//     let delta = length / res;
+//     let points: Array<point> = [];
+//     for (let i = 0; i <= length + 0.001; i += delta) {
+//       points.push({
+//         x: fixed,
+//         y: base + i
+//       });
+//     }
+//     return points;
+//   }
+
+//   let sides = [
+//     points_from_line(dims.x, dims.y + dims.height, dims.y),
+//     points_from_line(dims.y, dims.x + dims.width, dims.x),
+//     points_from_line(dims.x + dims.width, dims.y + dims.height, dims.y),
+//     points_from_line(dims.y + dims.height, dims.x + dims.width, dims.x)
+//   ]; // left, top, right, bottom 
+
+//   // get possible overlapping elements
+//   let candidates: Array<HTMLElement> = [];
+//   for (let side = 0; side < sides.length; side++)
+//     sides[side].map(coord => document.elementsFromPoint(coord.x, coord.y)).forEach((elem: Array<HTMLElement>) => {
+//       // calculate if elem[] contains elem inside par box
+//       for (let i = 0; i < elem.length; i++) {
+//         let dim = elem[i].getBoundingClientRect();
+//         let styles = window.getComputedStyle(elem[i]);
+
+
+//         if (dim.x > dims.x && dim.x < dims.x + dims.width || // top left, bottom left
+//           dim.x + dim.width > dims.x && dim.x + dim.width < dims.x + dims.width) { // top right, bottom right
+//           // top 
+//           if (dim.y > dims.y && dim.y < dims.y + dims.height)
+//             candidates.push(elem[i]);
+//           // bottom 
+//           else if (dim.y + dim.height > dims.y && dim.y + dim.height < dims.y + dims.height)
+//             candidates.push(elem[i])
+//         }
+//       }
+//     });
+//   console.log(candidates);
+//   return [];
+// }
 
 window.addEventListener('load', (event) => {
   // get all paragraphs
   let paragraphs = document.getElementsByTagName('p');
-  let breaker = new Break();
 
   // set up an MO to catch the updated pars
   new MutationObserver((mutationList, observer) => {
     mutationList.forEach(elem => {
       console.log(elem);
       // check all the added nodes
-      for (let i = 0; i < elem.addedNodes.length; i++) {
+      for (let i = elem.addedNodes.length - 1; i >= 0; i--) {
         // if added node is a <p class="break par">, then
         // try the transformation
         let paragraph_element: HTMLElement = (elem.addedNodes[i] as HTMLElement);
         if (paragraph_element.classList.contains('par')) {
           let par = new WebPar();
           par.build(paragraph_element);
+
           // get par width (assume is box for now)
-          let width = paragraph_element.getBoundingClientRect().width;
-          let { breakpoints, ratios } = breaker.break(par, [width]);
+          let dims = paragraph_element.getBoundingClientRect();
+          let breaker = new WebBreak(dims.x, dims.y, dims.width, dims.height);
+          let { breakpoints, ratios } = breaker.break(par, []);
           // console.log(breakpoints);
           // console.log(ratios);
 

@@ -14,12 +14,12 @@ This isn't a very efficient solution, because we will need to render that box ag
 ## Progress
 - [x] hyphenation
 - [x] overfull boxes
-- [ ] detect floating content 
+- [ ] detect floating content (in progress)
 - [ ] link-aware
 - [ ] math-aware (hook into mathjax)
 - [ ] Knuth-Plass in linear time using SMAWK and Rust -> WASM 
 
 ## Current examples:
 
-![test 1](test1.png?raw=true)
-![test 2](test2.png?raw=true)
+![image test](image-test.png?raw=true "Testing floats")
+![hitchhikers](test2.png?raw=true "Excerpt from Hitchhiker's Guide to the Galaxy")
