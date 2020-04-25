@@ -22,4 +22,4 @@ This isn't a very efficient solution, because we will need to render that box ag
 ## Current examples:
 
 ![image test](image-test.png?raw=true "Testing floats")
-![hitchhikers](test2.png?raw=true "Excerpt from Hitchhiker's Guide to the Galaxy")
+![hitchhikers](test1.png?raw=true "Excerpt from Hitchhiker's Guide to the Galaxy")
