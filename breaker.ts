@@ -296,7 +296,7 @@ class Break {
     ratios[0] = undefined;
     for (let j = linenumber; j >= 0; j--) {
       // DEBUG   
-      if (j < linenumber) {
+      if (j < linenumber && DEBUG) {
         let closest_box_before_break: number = 0;
         for (let k = chosen.position; k >= 0; k--) {
           if (this.paragraph.body[k].type === 'box') {
@@ -716,7 +716,8 @@ var GLUE_CLASS = 'breaker-glue';
 var BOX_CLASS = 'breaker-box';
 var PEN_CLASS = 'breaker-penalty';
 var BASE_CLASS = 'break';
-var DEBUG = true;
+var VAR_PADDING = 0; // extra line padding for floats
+var DEBUG = false;
 
 // function lines_from_par(par: HTMLElement, lineheight: number): Array<number> {
 //   let dims = par.getBoundingClientRect();
@@ -766,27 +767,120 @@ var DEBUG = true;
 //   return [];
 // }
 
+
+function get_widths_from_par(dims: DOMRect, line_height: number): Array<number> {
+  let lines: Array<number> = [];
+
+  let unsafe_box: { elem: Element, dims: DOMRect };
+
+  for (let i = 0; i * line_height <= dims.height; i++) {
+    // get current line box
+    let line_box = {
+      x: dims.x,
+      y: dims.y + (i * line_height) + line_height / 2,
+      width: dims.width,
+      height: line_height
+    };
+    // split the difference and get dimensions
+    let boxes: Array<Element> = document
+      .elementsFromPoint(line_box.x + line_box.width, line_box.y)
+      .filter((x: Element) => !x.classList.contains(BASE_CLASS)); // skip breaker spans
+
+    // get possible overlapping elements
+    let candidates: Array<{ elem: Element, dims: DOMRect }> = [];
+    for (let j = 0; j < boxes.length; j++) {
+      let box_dims = boxes[j].getBoundingClientRect();
+      if (box_dims.x <= line_box.x) continue; // skip covering boxes
+      if (box_dims.x >= line_box.x && box_dims.x <= line_box.x + line_box.width) {
+        candidates.push({
+          elem: boxes[j],
+          dims: box_dims
+        });
+        if (DEBUG) {
+          console.log(`Found overlapping element`);
+          console.log(boxes[j]);
+        }
+      }
+    }
+    // check unsafe box
+    // if (unsafe_box && !(unsafe_box.dims.x <= line_box.x)) { // skip covering boxes
+    //   if (unsafe_box.dims.x >= line_box.x && unsafe_box.dims.x <= line_box.x + line_box.width)
+    //     candidates.push(unsafe_box);
+    // }
+
+    // store left-most (biggest) overlap
+    let overlap: number = 0;
+    for (let j = 0; j < candidates.length; j++) {
+      // calculate margins
+      let computed_styles = window.getComputedStyle(candidates[j].elem);
+      candidates[j].dims.x -= parseFloat(computed_styles.getPropertyValue('margin-left'));
+
+      // if box has bottom margin, it might extend lower to other lines
+      let margin_bottom = parseFloat(computed_styles.getPropertyValue('margin-bottom'));
+      if (margin_bottom > 0) {
+        candidates[j].dims.y += margin_bottom;
+        unsafe_box = candidates[j];
+        console.log(`adding unsafe box, margin: ${margin_bottom}`);
+      }
+
+      // run check again
+      let unsafe_overlap = 0;
+      if ((line_box.x + line_box.width - candidates[j].dims.x) > overlap) {
+        // check unsafe box
+        if (unsafe_box && unsafe_box.dims.y >= (line_box.y + line_height / 2) && unsafe_box.dims.y <= (line_box.y - line_height / 2)) {
+          unsafe_overlap = line_box.x + line_box.width - unsafe_box.dims.x;
+        } else {
+          unsafe_box = undefined;
+        }
+        overlap = line_box.x + line_box.width - candidates[j].dims.x;
+        if (unsafe_overlap > overlap)
+          overlap = unsafe_overlap;
+        if (overlap > 0)
+          overlap += VAR_PADDING;
+      }
+    }
+
+    lines.push(dims.width - overlap);
+  }
+  return lines;
+}
+
 window.addEventListener('load', (event) => {
   // get all paragraphs
   let paragraphs = document.getElementsByTagName('p');
+  let widths: Map<string, Array<number>> = new Map();
+
+  // generate widths
+  for (let i = 0; i < paragraphs.length; i++) {
+    let dims = paragraphs[i].getBoundingClientRect();
+    // estimate line-height
+    let line_height = parseFloat(window.getComputedStyle(paragraphs[i]).getPropertyValue('font-size')) * 1.3;
+    // to detect floats, grab offsets *before* replacing paragraphs.
+    let width: Array<number> = get_widths_from_par(dims, line_height);
+    // store width list
+    widths.set(`${i}`, width);
+  }
 
   // set up an MO to catch the updated pars
   new MutationObserver((mutationList, observer) => {
     mutationList.forEach(elem => {
-      console.log(elem);
+      // console.log(elem);
       // check all the added nodes
-      for (let i = elem.addedNodes.length - 1; i >= 0; i--) {
+      for (let i = 0; i < elem.addedNodes.length; i++) {
         // if added node is a <p class="break par">, then
         // try the transformation
         let paragraph_element: HTMLElement = (elem.addedNodes[i] as HTMLElement);
         if (paragraph_element.classList.contains('par')) {
+
           let par = new WebPar();
           par.build(paragraph_element);
 
           // get par width (assume is box for now)
-          let dims = paragraph_element.getBoundingClientRect();
-          let breaker = new WebBreak(dims.x, dims.y, dims.width, dims.height);
-          let { breakpoints, ratios } = breaker.break(par, []);
+          // let dims = paragraph_element.getBoundingClientRect();
+          // let line_height = (paragraph_element.childNodes[0] as HTMLElement).getBoundingClientRect().height;
+          // let breaker = new WebBreak(dims.x, dims.y, dims.width, line_height);
+          let breaker = new Break();
+          let { breakpoints, ratios } = breaker.break(par, widths.get(paragraph_element.getAttribute('id')));
           // console.log(breakpoints);
           // console.log(ratios);
 
@@ -838,12 +932,16 @@ window.addEventListener('load', (event) => {
               glue_line[glue].setAttribute('style', `width: ${adjustment}px;`);
             }
           }
+
+          // reset height
+          paragraph_element.setAttribute('style', 'height: auto;');
         }
       }
     });
   }).observe(document.body, { childList: true, subtree: true } as MutationObserverInit);
 
   for (let i = 0; i < paragraphs.length; i++) {
+
     // do replacement of pars
     // construct list in *memory* (no effect to DOM)
     let text = hyphenateSync(paragraphs[i].innerText, { hyphenChar: HYPENCHAR });
@@ -864,13 +962,13 @@ window.addEventListener('load', (event) => {
     word_list.appendChild(hyphen);
     word_list.appendChild(space);
 
-    for (let i = 0; i < processed.length; i++) {
+    for (let j = 0; j < processed.length; j++) {
 
       // insert words and hyphen penalties
-      insert_word_or_hyphen(word_list, processed[i]);
+      insert_word_or_hyphen(word_list, processed[j]);
 
       // inter-word glue
-      if (i < processed.length - 1) {
+      if (j < processed.length - 1) {
         let glue = document.createElement('span');
         glue.setAttribute('class', `break ${GLUE_CLASS}`);
         let space = document.createTextNode('\u2005');
@@ -882,7 +980,11 @@ window.addEventListener('load', (event) => {
     // create new paragraph
     let new_par = document.createElement('p');
     new_par.setAttribute('class', 'break par');
+    new_par.setAttribute('id', `${i}`);
     new_par.appendChild(word_list);
+
+    let dims = paragraphs[i].getBoundingClientRect();
+    new_par.setAttribute('style', `min-height: ${dims.height}; width: ${dims.width};`);
 
     // replace old paragraph
     paragraphs[i].parentElement.replaceChild(new_par, paragraphs[i]);
