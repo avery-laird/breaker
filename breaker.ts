@@ -584,7 +584,10 @@ class Break {
  */
 class WebPar extends Paragraph {
 
-  constructor() {
+  /** TypeSet object owning this paragraph */
+  parent: TypeSet;
+
+  constructor(parent: TypeSet) {
     super();
     /**
      * Before building the paragraph, we need the width of each word in pixels.
@@ -592,6 +595,7 @@ class WebPar extends Paragraph {
      * of the paragraph back into the paragraph as a sequence of <span>. Then, once
      * the spans are rendered, step through each word to get the width.
      */
+    this.parent = parent;
   }
 
   /**
@@ -611,16 +615,16 @@ class WebPar extends Paragraph {
     let space_stretch = (space_width) / 6;
     let space_shrink = (space_width) / 9;
 
-    for (let i = PAR_ARRAY_OFFSET; i < words.length; i++) {
+    for (let i = this.parent.PAR_ARRAY_OFFSET; i < words.length; i++) {
       // get widths of words
-      if ((words[i] as HTMLElement).classList.contains(BOX_CLASS)) {
+      if ((words[i] as HTMLElement).classList.contains(this.parent.BOX_CLASS)) {
         this.body.push(new Box(
           (words[i] as HTMLElement).getBoundingClientRect().width, // px
           words[i].textContent
         ));
-      } else if ((words[i] as HTMLElement).classList.contains(GLUE_CLASS)) {
+      } else if ((words[i] as HTMLElement).classList.contains(this.parent.GLUE_CLASS)) {
         this.body.push(new Glue(space_width, space_stretch, space_shrink));
-      } else if ((words[i] as HTMLElement).classList.contains(PEN_CLASS)) {
+      } else if ((words[i] as HTMLElement).classList.contains(this.parent.PEN_CLASS)) {
         this.body.push(new Penalty(hyphen_width, 100, 1)); // guessing penalty = 100
       }
       if (DEBUG)
@@ -636,88 +640,73 @@ class WebPar extends Paragraph {
   }
 }
 
-class WebBreak extends Break {
-  /** width of element (px) */
-  width: number;
-  /** height of line (px) */
-  line_height: number;
-  /** x position of element (px) */
-  x: number;
-  /** y position of element (px) */
-  y: number;
-  /** because line width queries the DOM,
-   * it's expensive, so use a cache to store
-   * already calculated lengths
-   */
-  line_cache: Map<number, number>;
+// class WebBreak extends Break {
+//   /** width of element (px) */
+//   width: number;
+//   /** height of line (px) */
+//   line_height: number;
+//   /** x position of element (px) */
+//   x: number;
+//   /** y position of element (px) */
+//   y: number;
+//   /** because line width queries the DOM,
+//    * it's expensive, so use a cache to store
+//    * already calculated lengths
+//    */
+//   line_cache: Map<number, number>;
 
-  constructor(x: number, y: number, width: number, line_height: number) {
-    super();
-    this.width = width;
-    this.line_height = line_height;
-    this.x = x;
-    this.y = y;
-    this.line_cache = new Map();
-  }
+//   constructor(x: number, y: number, width: number, line_height: number) {
+//     super();
+//     this.width = width;
+//     this.line_height = line_height;
+//     this.x = x;
+//     this.y = y;
+//     this.line_cache = new Map();
+//   }
 
-  /** make knuth-plass aware of floating content */
-  lines(i: number): number {
-    // check cache
-    let check = this.line_cache.get(i);
-    if (check)
-      return check;
+//   /** make knuth-plass aware of floating content */
+//   lines(i: number): number {
+//     // check cache
+//     let check = this.line_cache.get(i);
+//     if (check)
+//       return check;
 
-    // get current line box
-    let line_box = {
-      x: this.x,
-      y: this.y + (i * this.line_height) + this.line_height / 2,
-      width: this.width,
-      height: this.line_height
-    };
-    // split the difference and get dimensions
-    let boxes: Array<DOMRect> = document
-      .elementsFromPoint(line_box.x + line_box.width, line_box.y)
-      .filter((x: Element) => !x.classList.contains(BASE_CLASS)) // skip breaker spans
-      .map(x => x.getBoundingClientRect());
+//     // get current line box
+//     let line_box = {
+//       x: this.x,
+//       y: this.y + (i * this.line_height) + this.line_height / 2,
+//       width: this.width,
+//       height: this.line_height
+//     };
+//     // split the difference and get dimensions
+//     let boxes: Array<DOMRect> = document
+//       .elementsFromPoint(line_box.x + line_box.width, line_box.y)
+//       .filter((x: Element) => !x.classList.contains(BASE_CLASS)) // skip breaker spans
+//       .map(x => x.getBoundingClientRect());
 
-    // store left-most (biggest) overlap
-    let overlap: number = 0;
-    for (let j = 0; j < boxes.length; j++) {
-      if (boxes[j].x <= line_box.x) continue; // skip covering boxes
-      if (boxes[j].x >= line_box.x && boxes[j].x <= line_box.x + line_box.width) {
-        if ((line_box.x + line_box.width - boxes[j].x) > overlap)
-          overlap = line_box.x + line_box.width - boxes[j].x;
-      }
-    }
-    this.line_cache.set(i, this.width - overlap);
-    return this.width - overlap;
-  }
-}
+//     // store left-most (biggest) overlap
+//     let overlap: number = 0;
+//     for (let j = 0; j < boxes.length; j++) {
+//       if (boxes[j].x <= line_box.x) continue; // skip covering boxes
+//       if (boxes[j].x >= line_box.x && boxes[j].x <= line_box.x + line_box.width) {
+//         if ((line_box.x + line_box.width - boxes[j].x) > overlap)
+//           overlap = line_box.x + line_box.width - boxes[j].x;
+//       }
+//     }
+//     this.line_cache.set(i, this.width - overlap);
+//     return this.width - overlap;
+//   }
+// }
 
-function insert_word_or_hyphen(word_list: DocumentFragment, word_string: string) {
-  let word_parts = word_string.split(HYPENCHAR);
-  for (let i = 0; i < word_parts.length; i++) {
-    let word_part = document.createElement('span');
-    word_part.setAttribute('class', `break ${BOX_CLASS}`);
-    word_part.textContent = word_parts[i];
-    word_list.appendChild(word_part);
-    if (i < word_parts.length - 1) {
-      // add hyphen penalty
-      let penalty = document.createElement('span');
-      penalty.setAttribute('class', `break ${PEN_CLASS}`);
-      word_list.appendChild(penalty);
-    }
-  }
-}
 
-var HYPENCHAR = '_breakerhyphen_';
-var PAR_ARRAY_OFFSET = 2; // reserve 1st two spots for space and hyphen
-var GLUE_CLASS = 'breaker-glue';
-var BOX_CLASS = 'breaker-box';
-var PEN_CLASS = 'breaker-penalty';
-var BASE_CLASS = 'break';
-var VAR_PADDING = 0; // extra line padding for floats
-var DEBUG = false;
+// var HYPENCHAR = '_breakerhyphen_';
+// var PAR_ARRAY_OFFSET = 2; // reserve 1st two spots for space and hyphen
+// var GLUE_CLASS = 'breaker-glue';
+// var BOX_CLASS = 'breaker-box';
+// var PEN_CLASS = 'breaker-penalty';
+// var BASE_CLASS = 'break';
+// var VAR_PADDING = 0; // extra line padding for floats
+// var DEBUG = false;
 
 // function lines_from_par(par: HTMLElement, lineheight: number): Array<number> {
 //   let dims = par.getBoundingClientRect();
@@ -768,102 +757,194 @@ var DEBUG = false;
 // }
 
 
-function get_widths_from_par(dims: DOMRect, line_height: number): Array<number> {
-  let lines: Array<number> = [];
+// function get_widths_from_par(dims: DOMRect, line_height: number): Array<number> {
+//   let lines: Array<number> = [];
 
-  let unsafe_box: { elem: Element, dims: DOMRect };
+//   let unsafe_box: { elem: Element, dims: DOMRect };
 
-  for (let i = 0; i * line_height <= dims.height; i++) {
-    // get current line box
-    let line_box = {
-      x: dims.x,
-      y: dims.y + (i * line_height) + line_height / 2,
-      width: dims.width,
-      height: line_height
-    };
-    // split the difference and get dimensions
-    let boxes: Array<Element> = document
-      .elementsFromPoint(line_box.x + line_box.width, line_box.y)
-      .filter((x: Element) => !x.classList.contains(BASE_CLASS)); // skip breaker spans
+//   for (let i = 0; i * line_height <= dims.height; i++) {
+//     // get current line box
+//     let line_box = {
+//       x: dims.x,
+//       y: dims.y + (i * line_height) + line_height / 2,
+//       width: dims.width,
+//       height: line_height
+//     };
+//     // split the difference and get dimensions
+//     let boxes: Array<Element> = document
+//       .elementsFromPoint(line_box.x + line_box.width, line_box.y)
+//       .filter((x: Element) => !x.classList.contains(BASE_CLASS)); // skip breaker spans
 
-    // get possible overlapping elements
-    let candidates: Array<{ elem: Element, dims: DOMRect }> = [];
-    for (let j = 0; j < boxes.length; j++) {
-      let box_dims = boxes[j].getBoundingClientRect();
-      if (box_dims.x <= line_box.x) continue; // skip covering boxes
-      if (box_dims.x >= line_box.x && box_dims.x <= line_box.x + line_box.width) {
-        candidates.push({
-          elem: boxes[j],
-          dims: box_dims
-        });
-        if (DEBUG) {
-          console.log(`Found overlapping element`);
-          console.log(boxes[j]);
+//     // get possible overlapping elements
+//     let candidates: Array<{ elem: Element, dims: DOMRect }> = [];
+//     for (let j = 0; j < boxes.length; j++) {
+//       let box_dims = boxes[j].getBoundingClientRect();
+//       if (box_dims.x <= line_box.x) continue; // skip covering boxes
+//       if (box_dims.x >= line_box.x && box_dims.x <= line_box.x + line_box.width) {
+//         candidates.push({
+//           elem: boxes[j],
+//           dims: box_dims
+//         });
+//         if (DEBUG) {
+//           console.log(`Found overlapping element`);
+//           console.log(boxes[j]);
+//         }
+//       }
+//     }
+//     // check unsafe box
+//     // if (unsafe_box && !(unsafe_box.dims.x <= line_box.x)) { // skip covering boxes
+//     //   if (unsafe_box.dims.x >= line_box.x && unsafe_box.dims.x <= line_box.x + line_box.width)
+//     //     candidates.push(unsafe_box);
+//     // }
+
+//     // store left-most (biggest) overlap
+//     let overlap: number = 0;
+//     for (let j = 0; j < candidates.length; j++) {
+//       // calculate margins
+//       let computed_styles = window.getComputedStyle(candidates[j].elem);
+//       candidates[j].dims.x -= parseFloat(computed_styles.getPropertyValue('margin-left'));
+
+//       // if box has bottom margin, it might extend lower to other lines
+//       let margin_bottom = parseFloat(computed_styles.getPropertyValue('margin-bottom'));
+//       if (margin_bottom > 0) {
+//         candidates[j].dims.y += margin_bottom;
+//         unsafe_box = candidates[j];
+//         console.log(`adding unsafe box, margin: ${margin_bottom}`);
+//       }
+
+//       // run check again
+//       let unsafe_overlap = 0;
+//       if ((line_box.x + line_box.width - candidates[j].dims.x) > overlap) {
+//         // check unsafe box
+//         if (unsafe_box && unsafe_box.dims.y >= (line_box.y + line_height / 2) && unsafe_box.dims.y <= (line_box.y - line_height / 2)) {
+//           unsafe_overlap = line_box.x + line_box.width - unsafe_box.dims.x;
+//         } else {
+//           unsafe_box = undefined;
+//         }
+//         overlap = line_box.x + line_box.width - candidates[j].dims.x;
+//         if (unsafe_overlap > overlap)
+//           overlap = unsafe_overlap;
+//         if (overlap > 0)
+//           overlap += VAR_PADDING;
+//       }
+//     }
+
+//     lines.push(dims.width - overlap);
+//   }
+//   return lines;
+// }
+
+var DEBUG = false;
+
+class TypeSet {
+
+  HYPHENCHAR: string;
+  /** reserve 1st two spots for space and hyphen */
+  PAR_ARRAY_OFFSET: number;
+  GLUE_CLASS: string;
+  BOX_CLASS: string;
+  PEN_CLASS: string;
+  BASE_CLASS: string;
+  /** extra line padding for floats */
+  VAR_PADDING: number;
+  DEBUG: boolean;
+
+  constructor() {
+    this.HYPHENCHAR = '_breakerhyphen_';
+    this.PAR_ARRAY_OFFSET = 2;
+    this.GLUE_CLASS = 'breaker-glue';
+    this.BOX_CLASS = 'breaker-box';
+    this.PEN_CLASS = 'breaker-penalty';
+    this.BASE_CLASS = 'break';
+    this.VAR_PADDING = 0;
+    this.DEBUG = DEBUG || false;
+
+    this.pre_transform();
+    // calls set() implicity through MO, no need to invoke here
+    this.transform();
+    this.post_transform();
+  }
+
+  /** 
+   * any  operations to perform before transformation
+   */
+  pre_transform() {
+    new MutationObserver(
+      (mutation_list, observer) => this.set(mutation_list, observer)
+    ).observe(document.body, { childList: true, subtree: true } as MutationObserverInit);
+    return this;
+  }
+
+  /**
+   * Convert everything from collect_paragraphs
+   * into whatever form is required for setting
+   */
+  transform() {
+    let paragraphs = this.collect_paragraphs();
+
+    for (let i = 0; i < paragraphs.length; i++) {
+
+      // do replacement of pars
+      // construct list in *memory* (no effect to DOM)
+      let text = hyphenateSync(paragraphs[i].innerText, { hyphenChar: this.HYPHENCHAR });
+
+      // split by whitespace
+      let processed = text.replace(/\s+/g, ' ').replace(/(^\s+)|(\s+$)/g, '').split(' ')
+      let word_list = document.createDocumentFragment();
+
+      // first, insert a hyphen and space so we can measure them
+      // at the same time
+      let hyphen = document.createElement('span');
+      hyphen.textContent = '-';
+      // position out of view
+      hyphen.setAttribute('style', 'position: absolute; top: -8000px; left: -8000px;');
+      let space = document.createElement('span');
+      space.textContent = '\u2005';
+      space.setAttribute('style', 'position: absolute; top: -8000px; left: -8000px;');
+      word_list.appendChild(hyphen);
+      word_list.appendChild(space);
+
+      for (let j = 0; j < processed.length; j++) {
+
+        // insert words and hyphen penalties
+        this.insert_word_or_hyphen(word_list, processed[j]);
+
+        // inter-word glue
+        if (j < processed.length - 1) {
+          let glue = document.createElement('span');
+          glue.setAttribute('class', `break ${this.GLUE_CLASS}`);
+          let space = document.createTextNode('\u2005');
+          glue.appendChild(space);
+          word_list.appendChild(glue);
         }
       }
+
+      // create new paragraph
+      let new_par = document.createElement('p');
+      new_par.setAttribute('class', 'break par');
+      new_par.setAttribute('id', `${i}`);
+      new_par.appendChild(word_list);
+
+      let dims = paragraphs[i].getBoundingClientRect();
+      new_par.setAttribute('style', `min-height: ${dims.height}; width: ${dims.width};`);
+
+      // replace old paragraph
+      paragraphs[i].parentElement.replaceChild(new_par, paragraphs[i]);
     }
-    // check unsafe box
-    // if (unsafe_box && !(unsafe_box.dims.x <= line_box.x)) { // skip covering boxes
-    //   if (unsafe_box.dims.x >= line_box.x && unsafe_box.dims.x <= line_box.x + line_box.width)
-    //     candidates.push(unsafe_box);
-    // }
-
-    // store left-most (biggest) overlap
-    let overlap: number = 0;
-    for (let j = 0; j < candidates.length; j++) {
-      // calculate margins
-      let computed_styles = window.getComputedStyle(candidates[j].elem);
-      candidates[j].dims.x -= parseFloat(computed_styles.getPropertyValue('margin-left'));
-
-      // if box has bottom margin, it might extend lower to other lines
-      let margin_bottom = parseFloat(computed_styles.getPropertyValue('margin-bottom'));
-      if (margin_bottom > 0) {
-        candidates[j].dims.y += margin_bottom;
-        unsafe_box = candidates[j];
-        console.log(`adding unsafe box, margin: ${margin_bottom}`);
-      }
-
-      // run check again
-      let unsafe_overlap = 0;
-      if ((line_box.x + line_box.width - candidates[j].dims.x) > overlap) {
-        // check unsafe box
-        if (unsafe_box && unsafe_box.dims.y >= (line_box.y + line_height / 2) && unsafe_box.dims.y <= (line_box.y - line_height / 2)) {
-          unsafe_overlap = line_box.x + line_box.width - unsafe_box.dims.x;
-        } else {
-          unsafe_box = undefined;
-        }
-        overlap = line_box.x + line_box.width - candidates[j].dims.x;
-        if (unsafe_overlap > overlap)
-          overlap = unsafe_overlap;
-        if (overlap > 0)
-          overlap += VAR_PADDING;
-      }
-    }
-
-    lines.push(dims.width - overlap);
-  }
-  return lines;
-}
-
-window.addEventListener('load', (event) => {
-  // get all paragraphs
-  let paragraphs = document.getElementsByTagName('p');
-  let widths: Map<string, Array<number>> = new Map();
-
-  // generate widths
-  for (let i = 0; i < paragraphs.length; i++) {
-    let dims = paragraphs[i].getBoundingClientRect();
-    // estimate line-height
-    let line_height = parseFloat(window.getComputedStyle(paragraphs[i]).getPropertyValue('font-size')) * 1.3;
-    // to detect floats, grab offsets *before* replacing paragraphs.
-    let width: Array<number> = get_widths_from_par(dims, line_height);
-    // store width list
-    widths.set(`${i}`, width);
+    return this;
   }
 
-  // set up an MO to catch the updated pars
-  new MutationObserver((mutationList, observer) => {
-    mutationList.forEach(elem => {
+
+  /**
+   * any operations to perform after transformation
+   */
+  post_transform() { }
+
+  /**
+   * set
+   */
+  set(...args: Array<any>) {
+    (args[0] as Array<MutationRecord>).forEach(elem => {
       // console.log(elem);
       // check all the added nodes
       for (let i = 0; i < elem.addedNodes.length; i++) {
@@ -872,43 +953,37 @@ window.addEventListener('load', (event) => {
         let paragraph_element: HTMLElement = (elem.addedNodes[i] as HTMLElement);
         if (paragraph_element.classList.contains('par')) {
 
-          let par = new WebPar();
+          let par = new WebPar(this);
           par.build(paragraph_element);
 
           // get par width (assume is box for now)
-          // let dims = paragraph_element.getBoundingClientRect();
-          // let line_height = (paragraph_element.childNodes[0] as HTMLElement).getBoundingClientRect().height;
-          // let breaker = new WebBreak(dims.x, dims.y, dims.width, line_height);
+          let dims = paragraph_element.getBoundingClientRect();
           let breaker = new Break();
-          let { breakpoints, ratios } = breaker.break(par, widths.get(paragraph_element.getAttribute('id')));
-          // console.log(breakpoints);
-          // console.log(ratios);
+          let { breakpoints, ratios } = breaker.break(par, [dims.width]);
 
           // collect all breakpoint nodes 
           let dom_breakpoints: Array<HTMLElement> = [];
-          for (let j = 1; j < breakpoints.length && breakpoints[j] + PAR_ARRAY_OFFSET < paragraph_element.childNodes.length; j++)
-            dom_breakpoints.push(paragraph_element.childNodes[breakpoints[j] + PAR_ARRAY_OFFSET] as HTMLElement);
+          for (let j = 1; j < breakpoints.length && breakpoints[j] + this.PAR_ARRAY_OFFSET < paragraph_element.childNodes.length; j++)
+            dom_breakpoints.push(paragraph_element.childNodes[breakpoints[j] + this.PAR_ARRAY_OFFSET] as HTMLElement);
 
           // collect all glue
           let glue_by_line: Array<Array<HTMLElement>> = [];
           // initialize array
           for (let j = 0; j < breakpoints.length; j++)
             glue_by_line.push([]);
-          for (let j = PAR_ARRAY_OFFSET, line = 1; j < paragraph_element.childNodes.length; j++) {
-            if ((paragraph_element.childNodes[j] as HTMLElement).classList.contains(GLUE_CLASS))
+          for (let j = this.PAR_ARRAY_OFFSET, line = 1; j < paragraph_element.childNodes.length; j++) {
+            if ((paragraph_element.childNodes[j] as HTMLElement).classList.contains(this.GLUE_CLASS))
               glue_by_line[line].push(paragraph_element.childNodes[j] as HTMLElement);
             if (breakpoints[line] === j)
               line++;
           }
-          // console.log(glue_by_line);
 
-          // now, insert <br>
           for (let j = 0; j < dom_breakpoints.length; j++) {
-            if (dom_breakpoints[j].classList.contains(GLUE_CLASS)) {
+            if (dom_breakpoints[j].classList.contains(this.GLUE_CLASS)) {
               dom_breakpoints[j].insertAdjacentElement('afterend', document.createElement('br'));
               // from span_element back to the next breakpoint,
               // stretch all glue
-            } else if (dom_breakpoints[j].classList.contains(PEN_CLASS)) {
+            } else if (dom_breakpoints[j].classList.contains(this.PEN_CLASS)) {
               // insert hyphen, then break
               let hyphen = document.createElement('span');
               hyphen.textContent = '-';
@@ -938,55 +1013,189 @@ window.addEventListener('load', (event) => {
         }
       }
     });
-  }).observe(document.body, { childList: true, subtree: true } as MutationObserverInit);
+  }
 
-  for (let i = 0; i < paragraphs.length; i++) {
+  collect_paragraphs() {
+    return document.getElementsByTagName('p');
+  }
 
-    // do replacement of pars
-    // construct list in *memory* (no effect to DOM)
-    let text = hyphenateSync(paragraphs[i].innerText, { hyphenChar: HYPENCHAR });
-
-    // split by whitespace
-    let processed = text.replace(/\s+/g, ' ').replace(/(^\s+)|(\s+$)/g, '').split(' ')
-    let word_list = document.createDocumentFragment();
-
-    // first, insert a hyphen and space so we can measure them
-    // at the same time
-    let hyphen = document.createElement('span');
-    hyphen.textContent = '-';
-    // position out of view
-    hyphen.setAttribute('style', 'position: absolute; top: -8000px; left: -8000px;');
-    let space = document.createElement('span');
-    space.textContent = '\u2005';
-    space.setAttribute('style', 'position: absolute; top: -8000px; left: -8000px;');
-    word_list.appendChild(hyphen);
-    word_list.appendChild(space);
-
-    for (let j = 0; j < processed.length; j++) {
-
-      // insert words and hyphen penalties
-      insert_word_or_hyphen(word_list, processed[j]);
-
-      // inter-word glue
-      if (j < processed.length - 1) {
-        let glue = document.createElement('span');
-        glue.setAttribute('class', `break ${GLUE_CLASS}`);
-        let space = document.createTextNode('\u2005');
-        glue.appendChild(space);
-        word_list.appendChild(glue);
+  insert_word_or_hyphen(word_list: DocumentFragment, word_string: string) {
+    let word_parts = word_string.split(this.HYPHENCHAR);
+    for (let i = 0; i < word_parts.length; i++) {
+      let word_part = document.createElement('span');
+      word_part.setAttribute('class', `break ${this.BOX_CLASS}`);
+      word_part.textContent = word_parts[i];
+      word_list.appendChild(word_part);
+      if (i < word_parts.length - 1) {
+        // add hyphen penalty
+        let penalty = document.createElement('span');
+        penalty.setAttribute('class', `break ${this.PEN_CLASS}`);
+        word_list.appendChild(penalty);
       }
     }
-
-    // create new paragraph
-    let new_par = document.createElement('p');
-    new_par.setAttribute('class', 'break par');
-    new_par.setAttribute('id', `${i}`);
-    new_par.appendChild(word_list);
-
-    let dims = paragraphs[i].getBoundingClientRect();
-    new_par.setAttribute('style', `min-height: ${dims.height}; width: ${dims.width};`);
-
-    // replace old paragraph
-    paragraphs[i].parentElement.replaceChild(new_par, paragraphs[i]);
   }
-});
+
+}
+
+window.addEventListener('load', (event) => { new TypeSet(); });
+
+// window.addEventListener('load', (event) => {
+//   // get all paragraphs
+//   let paragraphs = document.getElementsByTagName('p');
+//   let widths: Map<string, Array<number>> = new Map();
+
+//   // generate widths
+//   for (let i = 0; i < paragraphs.length; i++) {
+//     let dims = paragraphs[i].getBoundingClientRect();
+
+//     // estimate line-height
+//     let par_styles = window.getComputedStyle(paragraphs[i]);
+//     let line_height: number;
+//     // unitless or px?
+//     let line_height_string: string = par_styles.getPropertyValue('line-height');
+//     if (line_height_string.includes('px')) {
+//       // treat as px line height
+//       line_height = parseFloat(line_height_string);
+//     } else if (!line_height_string.match(/[a-zA-Z]+/)) {
+//       // treat as unitless
+//       line_height = parseFloat(par_styles.getPropertyValue('font-size')) * parseFloat(line_height_string);
+//     } else {
+//       // default to 1.2
+//       line_height = parseFloat(par_styles.getPropertyValue('font-size')) * 1.2;
+//     }
+
+//     // to detect floats, grab offsets *before* replacing paragraphs.
+//     let width: Array<number> = get_widths_from_par(dims, line_height);
+//     // store width list
+//     widths.set(`${i}`, width);
+//   }
+
+//   // set up an MO to catch the updated pars
+//   new MutationObserver((mutationList, observer) => {
+//     mutationList.forEach(elem => {
+//       // console.log(elem);
+//       // check all the added nodes
+//       for (let i = 0; i < elem.addedNodes.length; i++) {
+//         // if added node is a <p class="break par">, then
+//         // try the transformation
+//         let paragraph_element: HTMLElement = (elem.addedNodes[i] as HTMLElement);
+//         if (paragraph_element.classList.contains('par')) {
+
+//           let par = new WebPar();
+//           par.build(paragraph_element);
+
+//           // get par width (assume is box for now)
+//           // let dims = paragraph_element.getBoundingClientRect();
+//           // let line_height = (paragraph_element.childNodes[0] as HTMLElement).getBoundingClientRect().height;
+//           // let breaker = new WebBreak(dims.x, dims.y, dims.width, line_height);
+//           let breaker = new Break();
+//           let { breakpoints, ratios } = breaker.break(par, widths.get(paragraph_element.getAttribute('id')));
+//           // console.log(breakpoints);
+//           // console.log(ratios);
+
+//           // collect all breakpoint nodes 
+//           let dom_breakpoints: Array<HTMLElement> = [];
+//           for (let j = 1; j < breakpoints.length && breakpoints[j] + PAR_ARRAY_OFFSET < paragraph_element.childNodes.length; j++)
+//             dom_breakpoints.push(paragraph_element.childNodes[breakpoints[j] + PAR_ARRAY_OFFSET] as HTMLElement);
+
+//           // collect all glue
+//           let glue_by_line: Array<Array<HTMLElement>> = [];
+//           // initialize array
+//           for (let j = 0; j < breakpoints.length; j++)
+//             glue_by_line.push([]);
+//           for (let j = PAR_ARRAY_OFFSET, line = 1; j < paragraph_element.childNodes.length; j++) {
+//             if ((paragraph_element.childNodes[j] as HTMLElement).classList.contains(GLUE_CLASS))
+//               glue_by_line[line].push(paragraph_element.childNodes[j] as HTMLElement);
+//             if (breakpoints[line] === j)
+//               line++;
+//           }
+//           // console.log(glue_by_line);
+
+//           // now, insert <br>
+//           for (let j = 0; j < dom_breakpoints.length; j++) {
+//             if (dom_breakpoints[j].classList.contains(GLUE_CLASS)) {
+//               dom_breakpoints[j].insertAdjacentElement('afterend', document.createElement('br'));
+//               // from span_element back to the next breakpoint,
+//               // stretch all glue
+//             } else if (dom_breakpoints[j].classList.contains(PEN_CLASS)) {
+//               // insert hyphen, then break
+//               let hyphen = document.createElement('span');
+//               hyphen.textContent = '-';
+//               dom_breakpoints[j].insertAdjacentElement('afterend', hyphen);
+//               hyphen.insertAdjacentElement('afterend', document.createElement('br'));
+//             }
+//           }
+
+//           let space_width = (paragraph_element.childNodes[1] as HTMLElement).getBoundingClientRect().width;
+//           let space_stretch = (space_width) / 6;
+//           let space_shrink = (space_width) / 9;
+//           // now, adjust glue
+//           for (let line = 1; line < breakpoints.length; line++) {
+//             let glue_line: Array<HTMLElement> = glue_by_line[line];
+//             for (let glue = 0; glue < glue_line.length; glue++) {
+//               let adjustment = glue_line[glue].getBoundingClientRect().width;
+//               if (ratios[line] < 0)
+//                 adjustment += ratios[line] * space_shrink;
+//               else
+//                 adjustment += ratios[line] * space_stretch;
+//               glue_line[glue].setAttribute('style', `width: ${adjustment}px;`);
+//             }
+//           }
+
+//           // reset height
+//           paragraph_element.setAttribute('style', 'height: auto;');
+//         }
+//       }
+//     });
+//   }).observe(document.body, { childList: true, subtree: true } as MutationObserverInit);
+
+//   for (let i = 0; i < paragraphs.length; i++) {
+
+//     // do replacement of pars
+//     // construct list in *memory* (no effect to DOM)
+//     let text = hyphenateSync(paragraphs[i].innerText, { hyphenChar: HYPENCHAR });
+
+//     // split by whitespace
+//     let processed = text.replace(/\s+/g, ' ').replace(/(^\s+)|(\s+$)/g, '').split(' ')
+//     let word_list = document.createDocumentFragment();
+
+//     // first, insert a hyphen and space so we can measure them
+//     // at the same time
+//     let hyphen = document.createElement('span');
+//     hyphen.textContent = '-';
+//     // position out of view
+//     hyphen.setAttribute('style', 'position: absolute; top: -8000px; left: -8000px;');
+//     let space = document.createElement('span');
+//     space.textContent = '\u2005';
+//     space.setAttribute('style', 'position: absolute; top: -8000px; left: -8000px;');
+//     word_list.appendChild(hyphen);
+//     word_list.appendChild(space);
+
+//     for (let j = 0; j < processed.length; j++) {
+
+//       // insert words and hyphen penalties
+//       insert_word_or_hyphen(word_list, processed[j]);
+
+//       // inter-word glue
+//       if (j < processed.length - 1) {
+//         let glue = document.createElement('span');
+//         glue.setAttribute('class', `break ${GLUE_CLASS}`);
+//         let space = document.createTextNode('\u2005');
+//         glue.appendChild(space);
+//         word_list.appendChild(glue);
+//       }
+//     }
+
+//     // create new paragraph
+//     let new_par = document.createElement('p');
+//     new_par.setAttribute('class', 'break par');
+//     new_par.setAttribute('id', `${i}`);
+//     new_par.appendChild(word_list);
+
+//     let dims = paragraphs[i].getBoundingClientRect();
+//     new_par.setAttribute('style', `min-height: ${dims.height}; width: ${dims.width};`);
+
+//     // replace old paragraph
+//     paragraphs[i].parentElement.replaceChild(new_par, paragraphs[i]);
+//   }
+// });
