@@ -25,5 +25,5 @@ This isn't a very efficient solution, because we will need to render that box ag
 ![hitchhikers](test1.png?raw=true "Excerpt from Hitchhiker's Guide to the Galaxy")
 
 ### Testing floats
-There is an issue here with either the glue or line length calucation (note middle 3 lines of image)
+There is an issue here with either the glue width or line length calculation (note lines 2 and 3 are short)
 ![image test](image-test.png?raw=true "Testing floats")
